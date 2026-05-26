@@ -35,3 +35,9 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 ## Como rodar
 1. Suba a API: `python -m uvicorn app.main:app --reload`
 2. Em outro terminal, suba a interface: `streamlit run streamlit_app.py`
+
+## Variáveis de ambiente
+- `OPENAI_API_KEY=sua_chave`
+- `OPENAI_CHAT_MODEL=gpt-5.4-mini`
+- `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+- No arquivo `.env`, escreva sem aspas: `OPENAI_API_KEY=sk-...`

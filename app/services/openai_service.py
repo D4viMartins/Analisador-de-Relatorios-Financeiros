@@ -4,6 +4,9 @@ import os
 from functools import lru_cache
 
 from openai import OpenAI
+from app.services.env_loader import load_dotenv_file
+
+load_dotenv_file()
 
 CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.4-mini")
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
