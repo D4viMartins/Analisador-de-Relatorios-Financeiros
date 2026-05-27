@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.models.requests import AskRequest
 from app.models.responses import AskResponse
-from app.services.anthropic_service import answer_question
+from app.services.rag_service import answer_question
 
 router = APIRouter(prefix="/ask", tags=["ask"])
 

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.responses import UploadResponse
-from app.services.document_store import save_document
 from app.services.pdf_extractor import extract_pdf_content
+from app.services.rag_service import ingest_document
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -25,7 +25,12 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
     if not extracted["text"]:
         raise HTTPException(status_code=400, detail="O PDF foi lido, mas não contém texto extraível.")
 
-    document_id = save_document(extracted["text"])
+    try:
+        document_id = ingest_document(filename=file.filename or "documento.pdf", text=extracted["text"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
     return UploadResponse(
         document_id=document_id,

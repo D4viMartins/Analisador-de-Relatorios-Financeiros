@@ -1,17 +1,17 @@
-from dataclasses import dataclass
-
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db.session import init_db
 from app.main import app
-from app.services.document_store import clear_documents
-
-client = TestClient(app)
+from app.services.document_store import clear_database
 
 
-@pytest.fixture(autouse=True)
-def reset_document_store() -> None:
-    clear_documents()
+@pytest.fixture()
+def client() -> TestClient:
+    init_db()
+    clear_database()
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def create_pdf_bytes(text: str = "Relatorio Financeiro Receita: 1000") -> bytes:
@@ -40,9 +40,20 @@ def create_pdf_bytes(text: str = "Relatorio Financeiro Receita: 1000") -> bytes:
     pdf.extend(b"trailer<< /Size 6 /Root 1 0 R >>\n")
     pdf.extend(f"startxref\n{xref_start}\n%%EOF".encode("ascii"))
     return bytes(pdf)
+def _fake_embeddings(texts: list[str]) -> list[list[float]]:
+    vectors: list[list[float]] = []
+    for index, _ in enumerate(texts):
+        base = float(index + 1)
+        vectors.append([base, 0.0, 0.0])
+    return vectors
 
 
-def test_upload_pdf_success() -> None:
+def _fake_answer(question: str, context: str) -> str:
+    return f"Resposta simulada para: {question}"
+
+
+def test_upload_pdf_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
     pdf_bytes = create_pdf_bytes()
     files = {"file": ("relatorio.pdf", pdf_bytes, "application/pdf")}
 
@@ -57,7 +68,7 @@ def test_upload_pdf_success() -> None:
     assert payload["table_count"] == 0
 
 
-def test_upload_rejects_non_pdf() -> None:
+def test_upload_rejects_non_pdf(client: TestClient) -> None:
     files = {"file": ("arquivo.txt", b"hello", "text/plain")}
 
     response = client.post("/upload", files=files)
@@ -66,7 +77,7 @@ def test_upload_rejects_non_pdf() -> None:
     assert response.json()["detail"] == "Apenas arquivos PDF são aceitos."
 
 
-def test_upload_rejects_oversized_file() -> None:
+def test_upload_rejects_oversized_file(client: TestClient) -> None:
     files = {"file": ("relatorio.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024 + 1), "application/pdf")}
 
     response = client.post("/upload", files=files)
@@ -75,31 +86,12 @@ def test_upload_rejects_oversized_file() -> None:
     assert response.json()["detail"] == "O arquivo excede o limite de 10MB."
 
 
-@dataclass
-class _FakeTextBlock:
-    text: str
+def test_ask_uses_retrieved_context(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
+    monkeypatch.setattr("app.services.rag_service.generate_answer", _fake_answer)
 
-
-@dataclass
-class _FakeAnthropicResponse:
-    content: list[_FakeTextBlock]
-
-
-class _FakeMessages:
-    def create(self, **kwargs):
-        assert kwargs["model"] == "claude-sonnet-4-20250514"
-        return _FakeAnthropicResponse(content=[_FakeTextBlock(text="A receita está em 1000.")])
-
-
-class _FakeAnthropicClient:
-    messages = _FakeMessages()
-
-
-def test_ask_uses_cached_document_text(monkeypatch) -> None:
     upload_response = client.post("/upload", files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")})
     document_id = upload_response.json()["document_id"]
-
-    monkeypatch.setattr("app.services.anthropic_service.get_anthropic_client", lambda: _FakeAnthropicClient())
 
     response = client.post("/ask", json={"document_id": document_id, "question": "Qual é a receita?"})
 
@@ -107,10 +99,10 @@ def test_ask_uses_cached_document_text(monkeypatch) -> None:
     payload = response.json()
     assert payload["document_id"] == document_id
     assert payload["question"] == "Qual é a receita?"
-    assert payload["answer"] == "A receita está em 1000."
+    assert payload["answer"] == "Resposta simulada para: Qual é a receita?"
 
 
-def test_ask_rejects_unknown_document() -> None:
+def test_ask_rejects_unknown_document(client: TestClient) -> None:
     response = client.post("/ask", json={"document_id": "does-not-exist", "question": "Qual é a receita?"})
 
     assert response.status_code == 404
