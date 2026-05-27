@@ -35,10 +35,8 @@ with col_upload:
         else:
             st.session_state["document_id"] = payload["document_id"]
             st.session_state["uploaded_filename"] = payload["filename"]
-            st.session_state["uploaded_text"] = payload["text"]
             st.success("PDF processado com sucesso.")
             st.write("**Arquivo:**", payload["filename"])
-            st.text_area("Texto extraído", value=payload["text"], height=240)
 
 with col_ask:
     st.subheader("2. Fazer pergunta")
@@ -67,4 +65,4 @@ with col_ask:
             else:
                 st.success("Resposta recebida.")
                 st.write("**Resposta:**")
-                st.write(payload["answer"])
+                st.text(payload["answer"])

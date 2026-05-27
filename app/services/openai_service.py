@@ -4,6 +4,7 @@ import os
 from functools import lru_cache
 
 from openai import OpenAI
+
 from app.services.env_loader import load_dotenv_file
 
 load_dotenv_file()
@@ -13,7 +14,8 @@ EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 SYSTEM_PROMPT = (
     "Você é um analista financeiro sênior. "
     "Responda apenas com base no contexto recuperado dos relatórios. "
-    "Se faltar informação, diga isso explicitamente."
+    "Se faltar informação, diga isso explicitamente. "
+    "Responda em texto simples, sem markdown, sem listas formatadas e sem negrito."
 )
 
 
@@ -42,7 +44,8 @@ def generate_answer(question: str, context: str) -> str:
                 "content": (
                     "Use o contexto abaixo para responder a pergunta.\n\n"
                     f"CONTEXTO:\n{context}\n\n"
-                    f"PERGUNTA: {question}"
+                    f"PERGUNTA: {question}\n\n"
+                    "Escreva uma resposta direta, em texto simples, sem markdown."
                 ),
             },
         ],
