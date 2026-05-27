@@ -18,7 +18,7 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 - Persistência com SQLite via SQLAlchemy
 - Chunking do texto em blocos de aproximadamente 2000 tokens
 - Embeddings dos chunks com OpenAI
-- Busca semântica com FAISS
+- Busca semântica com vetorização em Python puro para compatibilidade no Windows
 - Fluxo RAG para responder perguntas com contexto recuperado
 
 ## Interface visual
@@ -33,5 +33,5 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 4. A pergunta e o contexto recuperado são enviados para a OpenAI, que devolve a resposta.
 
 ## Como rodar
-1. Suba a API: `uvicorn app.main:app --reload`
+1. Suba a API: `python -m uvicorn app.main:app --reload`
 2. Em outro terminal, suba a interface: `streamlit run streamlit_app.py`
