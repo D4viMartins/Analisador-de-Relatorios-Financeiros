@@ -1,6 +1,7 @@
-﻿from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.responses import UploadResponse
+from app.services.document_store import save_document
 from app.services.pdf_extractor import extract_pdf_content
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -24,7 +25,10 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
     if not extracted["text"]:
         raise HTTPException(status_code=400, detail="O PDF foi lido, mas não contém texto extraível.")
 
+    document_id = save_document(extracted["text"])
+
     return UploadResponse(
+        document_id=document_id,
         filename=file.filename or "documento.pdf",
         text=extracted["text"],
         page_count=extracted["page_count"],
