@@ -21,8 +21,17 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 - Busca semântica com FAISS
 - Fluxo RAG para responder perguntas com contexto recuperado
 
+## Interface visual
+- `streamlit_app.py` fornece uma tela simples para upload do PDF e perguntas
+- a interface conversa com a API em `http://localhost:8000`
+- ideal para demonstração em portfólio sem depender de Swagger ou Postman
+
 ## Fluxo atual
 1. `POST /upload` recebe o PDF.
 2. O texto extraído fica salvo em memória com um `document_id`.
 3. `POST /ask` usa esse `document_id` para recuperar os chunks relevantes.
 4. A pergunta e o contexto recuperado são enviados para a OpenAI, que devolve a resposta.
+
+## Como rodar
+1. Suba a API: `uvicorn app.main:app --reload`
+2. Em outro terminal, suba a interface: `streamlit run streamlit_app.py`
