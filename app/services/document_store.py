@@ -35,6 +35,19 @@ def get_document_text(document_id: str) -> str | None:
         return None if document is None else document.text
 
 
+def get_document_metadata(document_id: str) -> dict[str, str] | None:
+    with SessionLocal() as session:
+        document = session.get(Document, document_id)
+        if document is None:
+            return None
+
+        return {
+            "document_id": document.id,
+            "filename": document.filename,
+            "text": document.text,
+        }
+
+
 def get_document_chunks(document_id: str) -> list[dict[str, object]]:
     with SessionLocal() as session:
         chunks = (

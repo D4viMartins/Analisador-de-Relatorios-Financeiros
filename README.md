@@ -1,6 +1,6 @@
 # Analisador de Relatórios Financeiros
 
-API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais adiante, responder perguntas em linguagem natural.
+API em FastAPI para receber PDFs financeiros, extrair texto, responder perguntas em linguagem natural e gerar análises estruturadas.
 
 ## Sprint 1
 - Upload de PDF
@@ -18,8 +18,14 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 - Persistência com SQLite via SQLAlchemy
 - Chunking do texto em blocos de aproximadamente 2000 tokens
 - Embeddings dos chunks com OpenAI
-- Busca semântica com vetorização em Python puro para compatibilidade no Windows
+- Busca semântica com vetorizaÃ§Ã£o em Python puro para compatibilidade no Windows
 - Fluxo RAG para responder perguntas com contexto recuperado
+
+## Sprint 4
+- Endpoint `POST /analyze` para extrair receita, EBITDA, lucro e dívida
+- Cálculo de alavancagem, margem líquida e crescimento YoY
+- Endpoint `POST /compare` para comparar dois relatórios
+- Schemas Pydantic estruturados para respostas financeiras
 
 ## Interface visual
 - `streamlit_app.py` fornece uma tela simples para upload do PDF e perguntas
@@ -28,9 +34,11 @@ API em FastAPI para receber PDFs financeiros, extrair texto e tabelas e, mais ad
 
 ## Fluxo atual
 1. `POST /upload` recebe o PDF.
-2. O texto extraído fica salvo em memória com um `document_id`.
+2. O texto extraído fica salvo com um `document_id`.
 3. `POST /ask` usa esse `document_id` para recuperar os chunks relevantes.
 4. A pergunta e o contexto recuperado são enviados para a OpenAI, que devolve a resposta.
+5. `POST /analyze` extrai os principais indicadores financeiros.
+6. `POST /compare` compara dois relatórios lado a lado.
 
 ## Como rodar
 1. Suba a API: `python -m uvicorn app.main:app --reload`

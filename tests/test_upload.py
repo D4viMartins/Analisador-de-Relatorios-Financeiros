@@ -40,6 +40,8 @@ def create_pdf_bytes(text: str = "Relatorio Financeiro Receita: 1000") -> bytes:
     pdf.extend(b"trailer<< /Size 6 /Root 1 0 R >>\n")
     pdf.extend(f"startxref\n{xref_start}\n%%EOF".encode("ascii"))
     return bytes(pdf)
+
+
 def _fake_embeddings(texts: list[str]) -> list[list[float]]:
     vectors: list[list[float]] = []
     for index, _ in enumerate(texts):
@@ -48,16 +50,22 @@ def _fake_embeddings(texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-def _fake_answer(question: str, context: str) -> str:
-    return f"Resposta simulada para: {question}"
+def _upload_document(client: TestClient, text: str, filename: str = "relatorio.pdf") -> dict[str, object]:
+    response = client.post(
+        "/upload",
+        files={"file": (filename, create_pdf_bytes(text), "application/pdf")},
+    )
+    assert response.status_code == 200
+    return response.json()
 
 
 def test_upload_pdf_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
-    pdf_bytes = create_pdf_bytes()
-    files = {"file": ("relatorio.pdf", pdf_bytes, "application/pdf")}
 
-    response = client.post("/upload", files=files)
+    response = client.post(
+        "/upload",
+        files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")},
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -69,18 +77,17 @@ def test_upload_pdf_success(client: TestClient, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_upload_rejects_non_pdf(client: TestClient) -> None:
-    files = {"file": ("arquivo.txt", b"hello", "text/plain")}
-
-    response = client.post("/upload", files=files)
+    response = client.post("/upload", files={"file": ("arquivo.txt", b"hello", "text/plain")})
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Apenas arquivos PDF são aceitos."
 
 
 def test_upload_rejects_oversized_file(client: TestClient) -> None:
-    files = {"file": ("relatorio.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024 + 1), "application/pdf")}
-
-    response = client.post("/upload", files=files)
+    response = client.post(
+        "/upload",
+        files={"file": ("relatorio.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024 + 1), "application/pdf")},
+    )
 
     assert response.status_code == 413
     assert response.json()["detail"] == "O arquivo excede o limite de 10MB."
@@ -88,22 +95,96 @@ def test_upload_rejects_oversized_file(client: TestClient) -> None:
 
 def test_ask_uses_retrieved_context(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
-    monkeypatch.setattr("app.services.rag_service.generate_answer", _fake_answer)
+    monkeypatch.setattr("app.services.rag_service.generate_answer", lambda question, context: f"Resposta simulada para: {question}")
 
-    upload_response = client.post("/upload", files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")})
+    upload_response = client.post(
+        "/upload",
+        files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")},
+    )
     document_id = upload_response.json()["document_id"]
 
-    response = client.post("/ask", json={"document_id": document_id, "question": "Qual é a receita?"})
+    response = client.post("/ask", json={"document_id": document_id, "question": "Qual e a receita?"})
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["document_id"] == document_id
-    assert payload["question"] == "Qual é a receita?"
-    assert payload["answer"] == "Resposta simulada para: Qual é a receita?"
+    assert payload["question"] == "Qual e a receita?"
+    assert payload["answer"] == "Resposta simulada para: Qual e a receita?"
 
 
 def test_ask_rejects_unknown_document(client: TestClient) -> None:
-    response = client.post("/ask", json={"document_id": "does-not-exist", "question": "Qual é a receita?"})
+    response = client.post("/ask", json={"document_id": "does-not-exist", "question": "Qual e a receita?"})
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Documento não encontrado."
+
+
+def test_analyze_returns_structured_metrics(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
+
+    upload_response = client.post(
+        "/upload",
+        files={
+            "file": (
+                "relatorio.pdf",
+                create_pdf_bytes(
+                    "Receita liquida R$ 2.400.000 EBITDA ajustado R$ 500.000 Lucro liquido R$ 180.000 Divida bruta R$ 1.200.000 Crescimento de 12% em relacao ao ano anterior",
+                ),
+                "application/pdf",
+            )
+        },
+    )
+    document_id = upload_response.json()["document_id"]
+
+    response = client.post("/analyze", json={"document_id": document_id})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["document_id"] == document_id
+    assert payload["metrics"]["revenue"]["value"] == 2400000.0
+    assert payload["metrics"]["ebitda"]["value"] == 500000.0
+    assert payload["metrics"]["profit"]["value"] == 180000.0
+    assert payload["metrics"]["debt"]["value"] == 1200000.0
+    assert payload["indicators"]["net_margin"]["value"] == 7.5
+    assert payload["indicators"]["leverage"]["value"] == 2.4
+
+
+def test_compare_returns_deltas(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
+
+    doc_a = client.post(
+        "/upload",
+        files={
+            "file": (
+                "relatorio-1.pdf",
+                create_pdf_bytes(
+                    "Receita liquida R$ 2.000.000 EBITDA R$ 400.000 Lucro liquido R$ 100.000 Divida bruta R$ 900.000",
+                ),
+                "application/pdf",
+            )
+        },
+    ).json()["document_id"]
+
+    doc_b = client.post(
+        "/upload",
+        files={
+            "file": (
+                "relatorio-2.pdf",
+                create_pdf_bytes(
+                    "Receita liquida R$ 2.500.000 EBITDA R$ 500.000 Lucro liquido R$ 150.000 Divida bruta R$ 800.000",
+                ),
+                "application/pdf",
+            )
+        },
+    ).json()["document_id"]
+
+    response = client.post("/compare", json={"document_id_a": doc_a, "document_id_b": doc_b})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["document_a"]["document_id"] == doc_a
+    assert payload["document_b"]["document_id"] == doc_b
+    assert payload["deltas"][0]["metric"] == "revenue"
+    assert payload["deltas"][0]["document_a_value"] == 2000000.0
+    assert payload["deltas"][0]["document_b_value"] == 2500000.0
+    assert payload["deltas"][0]["absolute_change"] == 500000.0
