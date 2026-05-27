@@ -1,17 +1,28 @@
 from __future__ import annotations
 
+import os
+
 import httpx
 import streamlit as st
+
 from app.services.env_loader import load_dotenv_file
 
 load_dotenv_file()
 
 API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("API_BASE_URL", API_BASE_URL).strip() or API_BASE_URL
+API_KEY = os.getenv("APP_API_KEY", "").strip()
 
 st.set_page_config(page_title="Analisador de Relatórios Financeiros", layout="wide")
 
 st.title("Analisador de Relatórios Financeiros")
 st.caption("Envie um PDF, faça perguntas em linguagem natural e receba uma resposta na hora.")
+
+if not API_KEY:
+    st.error("Configure APP_API_KEY no arquivo .env para usar a interface.")
+    st.stop()
+
+headers = {"X-API-Key": API_KEY}
 
 col_upload, col_ask = st.columns(2)
 
@@ -24,7 +35,7 @@ with col_upload:
         files = {"file": (uploaded_file.name, file_bytes, "application/pdf")}
 
         try:
-            response = httpx.post(f"{API_BASE_URL}/upload", files=files, timeout=120)
+            response = httpx.post(f"{API_BASE_URL}/upload", files=files, headers=headers, timeout=120)
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPStatusError as exc:
@@ -53,6 +64,7 @@ with col_ask:
                 response = httpx.post(
                     f"{API_BASE_URL}/ask",
                     json={"document_id": document_id, "question": question},
+                    headers=headers,
                     timeout=120,
                 )
                 response.raise_for_status()

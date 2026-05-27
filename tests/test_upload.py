@@ -7,10 +7,11 @@ from app.services.document_store import clear_database
 
 
 @pytest.fixture()
-def client() -> TestClient:
+def auth_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("APP_API_KEY", "test-api-key")
     init_db()
     clear_database()
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": "test-api-key"}) as test_client:
         yield test_client
 
 
@@ -59,10 +60,10 @@ def _upload_document(client: TestClient, text: str, filename: str = "relatorio.p
     return response.json()
 
 
-def test_upload_pdf_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_upload_pdf_success(auth_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
 
-    response = client.post(
+    response = auth_client.post(
         "/upload",
         files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")},
     )
@@ -76,15 +77,15 @@ def test_upload_pdf_success(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     assert payload["table_count"] == 0
 
 
-def test_upload_rejects_non_pdf(client: TestClient) -> None:
-    response = client.post("/upload", files={"file": ("arquivo.txt", b"hello", "text/plain")})
+def test_upload_rejects_non_pdf(auth_client: TestClient) -> None:
+    response = auth_client.post("/upload", files={"file": ("arquivo.txt", b"hello", "text/plain")})
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Apenas arquivos PDF são aceitos."
 
 
-def test_upload_rejects_oversized_file(client: TestClient) -> None:
-    response = client.post(
+def test_upload_rejects_oversized_file(auth_client: TestClient) -> None:
+    response = auth_client.post(
         "/upload",
         files={"file": ("relatorio.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024 + 1), "application/pdf")},
     )
@@ -93,17 +94,17 @@ def test_upload_rejects_oversized_file(client: TestClient) -> None:
     assert response.json()["detail"] == "O arquivo excede o limite de 10MB."
 
 
-def test_ask_uses_retrieved_context(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ask_uses_retrieved_context(auth_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
     monkeypatch.setattr("app.services.rag_service.generate_answer", lambda question, context: f"Resposta simulada para: {question}")
 
-    upload_response = client.post(
+    upload_response = auth_client.post(
         "/upload",
         files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")},
     )
     document_id = upload_response.json()["document_id"]
 
-    response = client.post("/ask", json={"document_id": document_id, "question": "Qual e a receita?"})
+    response = auth_client.post("/ask", json={"document_id": document_id, "question": "Qual e a receita?"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -112,17 +113,17 @@ def test_ask_uses_retrieved_context(client: TestClient, monkeypatch: pytest.Monk
     assert payload["answer"] == "Resposta simulada para: Qual e a receita?"
 
 
-def test_ask_rejects_unknown_document(client: TestClient) -> None:
-    response = client.post("/ask", json={"document_id": "does-not-exist", "question": "Qual e a receita?"})
+def test_ask_rejects_unknown_document(auth_client: TestClient) -> None:
+    response = auth_client.post("/ask", json={"document_id": "does-not-exist", "question": "Qual e a receita?"})
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Documento não encontrado."
 
 
-def test_analyze_returns_structured_metrics(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_analyze_returns_structured_metrics(auth_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
 
-    upload_response = client.post(
+    upload_response = auth_client.post(
         "/upload",
         files={
             "file": (
@@ -136,7 +137,7 @@ def test_analyze_returns_structured_metrics(client: TestClient, monkeypatch: pyt
     )
     document_id = upload_response.json()["document_id"]
 
-    response = client.post("/analyze", json={"document_id": document_id})
+    response = auth_client.post("/analyze", json={"document_id": document_id})
 
     assert response.status_code == 200
     payload = response.json()
@@ -149,10 +150,10 @@ def test_analyze_returns_structured_metrics(client: TestClient, monkeypatch: pyt
     assert payload["indicators"]["leverage"]["value"] == 2.4
 
 
-def test_compare_returns_deltas(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compare_returns_deltas(auth_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.rag_service.embed_texts", _fake_embeddings)
 
-    doc_a = client.post(
+    doc_a = auth_client.post(
         "/upload",
         files={
             "file": (
@@ -165,7 +166,7 @@ def test_compare_returns_deltas(client: TestClient, monkeypatch: pytest.MonkeyPa
         },
     ).json()["document_id"]
 
-    doc_b = client.post(
+    doc_b = auth_client.post(
         "/upload",
         files={
             "file": (
@@ -178,7 +179,7 @@ def test_compare_returns_deltas(client: TestClient, monkeypatch: pytest.MonkeyPa
         },
     ).json()["document_id"]
 
-    response = client.post("/compare", json={"document_id_a": doc_a, "document_id_b": doc_b})
+    response = auth_client.post("/compare", json={"document_id_a": doc_a, "document_id_b": doc_b})
 
     assert response.status_code == 200
     payload = response.json()
@@ -188,3 +189,16 @@ def test_compare_returns_deltas(client: TestClient, monkeypatch: pytest.MonkeyPa
     assert payload["deltas"][0]["document_a_value"] == 2000000.0
     assert payload["deltas"][0]["document_b_value"] == 2500000.0
     assert payload["deltas"][0]["absolute_change"] == 500000.0
+
+
+def test_api_rejects_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_API_KEY", "test-api-key")
+    init_db()
+    clear_database()
+    with TestClient(app) as unauthenticated_client:
+        response = unauthenticated_client.post(
+            "/upload",
+            files={"file": ("relatorio.pdf", create_pdf_bytes(), "application/pdf")},
+        )
+
+    assert response.status_code == 401

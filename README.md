@@ -27,6 +27,12 @@ API em FastAPI para receber PDFs financeiros, extrair texto, responder perguntas
 - Endpoint `POST /compare` para comparar dois relatórios
 - Schemas Pydantic estruturados para respostas financeiras
 
+## Sprint 5
+- Autenticação via `X-API-Key`
+- Containerização com Docker
+- Deploy preparado para Railway
+- README de portfólio com instruções de uso e variáveis de ambiente
+
 ## Interface visual
 - `streamlit_app.py` fornece uma tela simples para upload do PDF e perguntas
 - a interface conversa com a API em `http://localhost:8000`
@@ -45,7 +51,39 @@ API em FastAPI para receber PDFs financeiros, extrair texto, responder perguntas
 2. Em outro terminal, suba a interface: `streamlit run streamlit_app.py`
 
 ## Variáveis de ambiente
+- `API_BASE_URL=http://localhost:8000`
+- `APP_API_KEY=uma-chave-qualquer-para-o-backend`
 - `OPENAI_API_KEY=sua_chave`
 - `OPENAI_CHAT_MODEL=gpt-5.4-mini`
 - `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
 - No arquivo `.env`, escreva sem aspas: `OPENAI_API_KEY=sk-...`
+
+## Autenticação
+- A API usa o cabeçalho `X-API-Key`
+- A chave do cliente deve ser igual a `APP_API_KEY`
+- O Streamlit já envia essa chave automaticamente a partir do `.env`
+- Para apontar a interface para um backend no Railway, ajuste `API_BASE_URL`
+
+## Docker
+Build:
+```powershell
+docker build -t analisador-relatorios-financeiros .
+```
+
+Run:
+```powershell
+docker run --rm -p 8000:8000 --env-file .env analisador-relatorios-financeiros
+```
+
+## Railway
+1. Suba este repositório para o GitHub.
+2. Crie um novo projeto no Railway e conecte o repositório.
+3. Railway deve detectar o `Dockerfile`.
+4. Configure as variáveis de ambiente:
+```text
+APP_API_KEY
+OPENAI_API_KEY
+OPENAI_CHAT_MODEL
+OPENAI_EMBEDDING_MODEL
+```
+5. Faça o deploy e use a URL pública gerada para consumir a API.
